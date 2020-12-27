@@ -1,0 +1,1407 @@
+---
+title: "Assignment 4"
+author: "Faraz Ahmadi"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document: 
+    number_sections: TRUE
+    fig_caption: true
+    code_folding: hide
+    toc: yes
+    toc_float: 
+      toc_collapsed: true
+    theme: readable
+---
+
+```{r setup, include=FALSE, echo=FALSE, include=TRUE} 
+knitr::opts_chunk$set(echo = TRUE, comment=NA, include=TRUE, echo=TRUE, warning=FALSE, message=FALSE, error=FALSE, root.dir = "E:/Marketing Analytics-- K. Deal/Assignment_4") ##echo is for the codes, include is for the outputs
+```
+
+```{r "basic_packages" , include=TRUE, include=FALSE}
+pacman::p_load(psych, xray , ggplot2, texreg, DT, wrapr, dplyr,
+               sjmisc, sjlabelled, sjstats, sjPlot, excelR,
+               knitr, kableExtra, captioner, car)
+
+options(max.print = 10000)
+options(scipen=999)
+```  
+
+# Statement of authorship
+
+I have executed and prepared this assignment and document by myself without the help of any other person.
+Signature:
+
+```{r echo=FALSE, fig.width=5, fig.height=3}
+knitr::include_graphics(path = "./signature.png") ##for the signature
+```
+
+# Background
+
+```{r}
+knitr::include_graphics(path = "./airplane.jpg") 
+```
+
+Passenger loyalty is fundamental to any airline aiming to maintain a stable market share and revenue stream (Chang and Hung, 2015), particularly in a turbulent market. The competitive landscape of the global airline industry has been in a constant change in recent years, with a rapid growth of low cost carriers and high-speed railways, rising fuel costs, fluctuating demand, and tighter security, safety and quality requirements. This is all but not considering a global pandemic like COVID-19 and its effects on airlines. To survive and grow, airlines managers need to identify factors of their services that satisfy and retain customers (Chen, 2008).
+
+# Objective
+
+The key objective of this report is to find segments in the key airline drivers customers. 
+
+# Methods
+
+1- k-means on attitudinal variables (Level-1 Segmentation)
+
+2- Predictive model for Level-1
+
+3- Using the demographic variables to predict Level-1 segments (Level-2 segmentation)
+
+4- Interpreting the demographic data in each segment (Level-2 segmentation)
+
+5- Implementing a marketing strategy based on Level-1 and Level-2
+
+# Loading the data
+
+```{r}
+df <- read.csv("Airline_Key_Drivers_mimv.csv")
+headTail(df) %>% datatable(rownames = F, filter="top", options = list(pageLength = 10, scrollX=T), caption = "Airline data")
+```
+
+
+# Level 1 Segmentation
+
+```{r include=FALSE, results='hide'}
+library(h2o)
+h2o.init()
+```
+
+Converting data to h2o object
+
+```{r, results='hide'}
+#Making the target variables to factors.
+df[,c("FlyAgain", "FlyAgain2")] <- lapply(df[,c("FlyAgain", "FlyAgain2")], as.factor)
+df.h2o <- as.h2o(df)
+```
+
+Doing k-means clustering using the 12 attitudinal variables.
+
+```{r}
+nSeg <- 2
+clus.2 <- h2o.kmeans(df.h2o[2:15], k = nSeg, estimate_k = F, 
+                   init=c("PlusPlus"), standardize= FALSE,
+                   score_each_iteration= FALSE, seed = 7238,
+                   keep_cross_validation_predictions=TRUE)
+
+h2o.cluster_sizes(clus.2)
+frq(df$FlyAgain2, out = 'v', title = "Frequency of Customer Return to Airline")
+```
+
+Saving the metrics of each clustering to select the best at the end. These metrics are sum squares (SS) of the distance between points in each cluster and among other clusters.
+
+```{r}
+clustMetrics <- data.frame(Numbr_Segments=numeric(),
+                  TotWithinSS=numeric(),
+                  BetweenSS=numeric(),
+                  TotSS=numeric(),
+                  stringsAsFactors=FALSE) 
+
+clustMetrics[nSeg - 1, 1] <- nSeg
+clustMetrics[nSeg - 1, 2] <- getTotWithinSS(clus.2)
+clustMetrics[nSeg - 1, 3] <- getBetweenSS(clus.2)
+clustMetrics[nSeg - 1, 4] <- getTotSS(clus.2)
+```
+
+```{r}
+tab_df(clustMetrics)
+```
+
+
+The following presents only cluster means, with centroid numbering
+```{r}
+clus.2@model$centers 
+```
+
+plotting the attribute difference in between clusters.
+
+```{r}
+library(reshape2) # it's necessary to reshape the data into 'long' format
+df2c_long<- melt(clus.2@model$centers ) # need to reshape to 'long' form
+#df2c_long
+```
+
+```{r, fig.width=10}
+ggplot(data=df2c_long, aes(x=variable, y=value, group=centroid)) +
+  geom_line(aes( color= centroid ), size=1.2)+
+  geom_point(aes( color= centroid ), size=3) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size=14)) +
+  labs( title= "Centroids (means) of Segments over Basis Variables", 
+        x= "Basis Variables", y= "Means (1-9)") + 
+  ylim(1, 9) +
+  annotate("text", x = 3, y = 1, label = paste("Base =", nrow(df)), size=4)  
+```
+
+total layering between segments is a bad thing so we move on to 3 segments!
+
+## 3 segments
+
+```{r, include=F, results='hide'}
+nSeg <- 3
+clus.3 <- h2o.kmeans(df.h2o[2:15], k = nSeg, estimate_k = F, 
+                   init=c("PlusPlus"), standardize= FALSE,
+                   score_each_iteration= FALSE, seed = 7238,
+                   keep_cross_validation_predictions=TRUE)
+
+```
+
+```{r}
+h2o.cluster_sizes(clus.3)
+```
+
+```{r}
+clustMetrics[nSeg - 1, 1] <- nSeg
+clustMetrics[nSeg - 1, 2] <- getTotWithinSS(clus.3)
+clustMetrics[nSeg - 1, 3] <- getBetweenSS(clus.3)
+clustMetrics[nSeg - 1, 4] <- getTotSS(clus.3)
+
+tab_df(clustMetrics, out= 'v')
+```
+
+```{r}
+df3c_long<- melt(clus.3@model$centers ) # need to reshape to 'long' form
+
+ggplot(data=df3c_long, aes(x=variable, y=value, group=centroid)) +
+  geom_line(aes( color= centroid ), size=1.2)+
+  geom_point(aes( color= centroid ), size=3) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size=14)) +
+  labs( title= "Centroids (means) of Segments over Basis Variables", 
+        x= "Basis Variables", y= "Means (1-9)") + 
+  ylim(1, 9) +
+  annotate("text", x = 3, y = 1, label = paste("Base =", nrow(df)), size=4)
+```
+
+Still layered. The second higher attitude segment is just cut in to two segments. We must add another segment to see.
+
+## 4 segment solution
+
+
+```{r, include=F, results='hide'}
+nSeg <- 4
+clus.4 <- h2o.kmeans(df.h2o[2:15], k = nSeg, estimate_k = F, 
+                   init=c("PlusPlus"), standardize= FALSE,
+                   score_each_iteration= FALSE, seed = 7238,
+                   keep_cross_validation_predictions=TRUE)
+
+```
+
+```{r}
+h2o.cluster_sizes(clus.4)
+```
+
+```{r}
+clustMetrics[nSeg - 1, 1] <- nSeg
+clustMetrics[nSeg - 1, 2] <- getTotWithinSS(clus.4)
+clustMetrics[nSeg - 1, 3] <- getBetweenSS(clus.4)
+clustMetrics[nSeg - 1, 4] <- getTotSS(clus.4)
+
+tab_df(clustMetrics, out= 'v')
+```
+
+```{r, fig.width=10}
+df4c_long<- melt(clus.4@model$centers ) # need to reshape to 'long' form
+
+ggplot(data=df4c_long, aes(x=variable, y=value, group=centroid)) +
+  geom_line(aes( color= centroid ), size=1.2)+
+  geom_point(aes( color= centroid ), size=3) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size=14)) +
+  labs( title= "Centroids (means) of Segments over Basis Variables", 
+        x= "Basis Variables", y= "Means (1-9)") + 
+  ylim(1, 9) +
+  annotate("text", x = 3, y = 1, label = paste("Base =", nrow(df)), size=4)
+```
+
+There is a crossover in seat_comfort and recommend variables between segments 1 and 3, however, we still need to increase our segments to get more information.
+
+## 5 Segment solution
+
+```{r, include=F, results='hide'}
+nSeg <- 5
+clus.5 <- h2o.kmeans(df.h2o[2:15], k = nSeg, estimate_k = F, 
+                   init=c("PlusPlus"), standardize= FALSE,
+                   score_each_iteration= FALSE, seed = 7238,
+                   keep_cross_validation_predictions=TRUE)
+
+```
+
+```{r}
+h2o.cluster_sizes(clus.5)
+```
+
+```{r}
+clustMetrics[nSeg - 1, 1] <- nSeg
+clustMetrics[nSeg - 1, 2] <- getTotWithinSS(clus.5)
+clustMetrics[nSeg - 1, 3] <- getBetweenSS(clus.5)
+clustMetrics[nSeg - 1, 4] <- getTotSS(clus.5)
+
+tab_df(clustMetrics, out= 'v')
+```
+
+```{r, fig.width=10}
+df5c_long<- melt(clus.5@model$centers ) # need to reshape to 'long' form
+
+ggplot(data=df5c_long, aes(x=variable, y=value, group=centroid)) +
+  geom_line(aes( color= centroid ), size=1.2)+
+  geom_point(aes( color= centroid ), size=3) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size=14)) +
+  labs( title= "Centroids (means) of Segments over Basis Variables", 
+        x= "Basis Variables", y= "Means (1-9)") + 
+  ylim(1, 9) +
+  annotate("text", x = 3, y = 1, label = paste("Base =", nrow(df)), size=4)
+```
+
+## 6 Segment solution
+
+```{r, include=F, results='hide'}
+nSeg <- 6
+clus.6 <- h2o.kmeans(df.h2o[2:15], k = nSeg, estimate_k = F, 
+                   init=c("PlusPlus"), standardize= FALSE,
+                   score_each_iteration= FALSE, seed = 7238,
+                   keep_cross_validation_predictions=TRUE)
+
+```
+
+```{r}
+h2o.cluster_sizes(clus.6)
+```
+
+```{r}
+clustMetrics[nSeg - 1, 1] <- nSeg
+clustMetrics[nSeg - 1, 2] <- getTotWithinSS(clus.6)
+clustMetrics[nSeg - 1, 3] <- getBetweenSS(clus.6)
+clustMetrics[nSeg - 1, 4] <- getTotSS(clus.6)
+
+tab_df(clustMetrics, out= 'v')
+```
+
+```{r, fig.width=12}
+df5c_long<- melt(clus.6@model$centers ) # need to reshape to 'long' form
+
+ggplot(data=df5c_long, aes(x=variable, y=value, group=centroid)) +
+  geom_line(aes( color= centroid ), size=1.2)+
+  geom_point(aes( color= centroid ), size=3) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size=14) , legend.position = "bottom") +
+  labs( title= "Centroids (means) of Segments over Basis Variables", 
+        x= "Basis Variables", y= "Means (1-9)") + 
+  ylim(1, 9) +
+  annotate("text", x = 3, y = 1, label = paste("Base =", nrow(df)), size=4) +
+  scale_color_discrete(name = "clusters",
+                       labels = paste("cluster", c(1:nSeg), " (", "size=", h2o.cluster_sizes(clus.6), ")" ))
+```
+
+
+## 7 Segment solution
+
+```{r, include=F, results='hide'}
+nSeg <- 7
+clus.7 <- h2o.kmeans(df.h2o[2:15], k = nSeg, estimate_k = F, 
+                   init=c("PlusPlus"), standardize= FALSE,
+                   score_each_iteration= FALSE, seed = 7238,
+                   keep_cross_validation_predictions=TRUE)
+
+```
+
+```{r}
+h2o.cluster_sizes(clus.7)
+```
+
+```{r}
+clustMetrics[nSeg - 1, 1] <- nSeg
+clustMetrics[nSeg - 1, 2] <- getTotWithinSS(clus.7)
+clustMetrics[nSeg - 1, 3] <- getBetweenSS(clus.7)
+clustMetrics[nSeg - 1, 4] <- getTotSS(clus.7)
+
+tab_df(clustMetrics, out= 'v')
+```
+
+```{r, fig.width=10}
+df5c_long<- melt(clus.7@model$centers ) # need to reshape to 'long' form
+
+ggplot(data=df5c_long, aes(x=variable, y=value, group=centroid)) +
+  geom_line(aes( color= centroid ), size=1.2)+
+  geom_point(aes( color= centroid ), size=3) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size=14), legend.position = "bottom") +
+  labs( title= "Centroids (means) of Segments over Basis Variables", 
+        x= "Basis Variables", y= "Means (1-9)") + 
+  ylim(1, 9) +
+  annotate("text", x = 3, y = 1, label = paste("Base =", nrow(df)), size=4) +
+  scale_color_discrete(name = "clusters",
+                       labels = paste("cluster", c(1:nSeg), " (", "size=", h2o.cluster_sizes(clus.7), ")" ))
+```
+
+
+## 8 Segment solution - final solution!>?
+
+```{r, include=F, results='hide'}
+nSeg <- 8
+clus.8 <- h2o.kmeans(df.h2o[2:15], k = nSeg, estimate_k = F, 
+                   init=c("PlusPlus"), standardize= FALSE,
+                   score_each_iteration= FALSE, seed = 7238,
+                   keep_cross_validation_predictions=TRUE)
+
+```
+
+```{r}
+h2o.cluster_sizes(clus.8)
+```
+
+```{r}
+clustMetrics[nSeg - 1, 1] <- nSeg
+clustMetrics[nSeg - 1, 2] <- getTotWithinSS(clus.8)
+clustMetrics[nSeg - 1, 3] <- getBetweenSS(clus.8)
+clustMetrics[nSeg - 1, 4] <- getTotSS(clus.8)
+
+tab_df(clustMetrics, out= 'v')
+```
+
+```{r, fig.width=13}
+df5c_long<- melt(clus.8@model$centers ) # need to reshape to 'long' form
+
+g8 <- ggplot(data=df5c_long, aes(x=variable, y=value, group=centroid)) +
+  geom_line(aes( color= centroid ), size=1.2)+
+  geom_point(aes( color= centroid ), size=3) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size=14) , legend.position = "bottom") +
+  labs( title= "Centroids (means) of Segments over Basis Variables", 
+        x= "Basis Variables", y= "Means (1-9)") + 
+  ylim(1, 9) +
+  annotate("text", x = 3, y = 1, label = paste("Base =", nrow(df)), size=4) +
+  scale_color_discrete(name = "clusters",
+                       labels = paste("cluster", c(1:nSeg), " (", "size=", h2o.cluster_sizes(clus.8), ")" )) 
+
+g8
+```
+
+This seems like a decent segmentation but before finalizing it as a viable segmentation, let's look at a 9 cluster model too.
+
+## 9 Segment solution - final solution!>?
+
+```{r, include=F, results='hide'}
+nSeg <- 9
+clus.9 <- h2o.kmeans(df.h2o[2:15], k = nSeg, estimate_k = F, 
+                   init=c("PlusPlus"), standardize= FALSE,
+                   score_each_iteration= FALSE, seed = 7238,
+                   keep_cross_validation_predictions=TRUE)
+
+```
+
+```{r}
+h2o.cluster_sizes(clus.9)
+```
+
+```{r}
+clustMetrics[nSeg - 1, 1] <- nSeg
+clustMetrics[nSeg - 1, 2] <- getTotWithinSS(clus.9)
+clustMetrics[nSeg - 1, 3] <- getBetweenSS(clus.9)
+clustMetrics[nSeg - 1, 4] <- getTotSS(clus.9)
+
+tab_df(clustMetrics, out= 'v')
+```
+
+```{r, fig.width=13}
+df5c_long<- melt(clus.9@model$centers ) # need to reshape to 'long' form
+
+ggplot(data=df5c_long, aes(x=variable, y=value, group=centroid)) +
+  geom_line(aes( color= centroid ), size=1.2)+
+  geom_point(aes( color= centroid ), size=3) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1, size=14) , legend.position = "bottom") +
+  labs( title= "Centroids (means) of Segments over Basis Variables", 
+        x= "Basis Variables", y= "Means (1-9)") + 
+  ylim(1, 9) +
+  annotate("text", x = 3, y = 1, label = paste("Base =", nrow(df)), size=4) +
+  scale_color_discrete(name = "clusters",
+                       labels = paste("cluster", c(1:nSeg), " (", "size=", h2o.cluster_sizes(clus.9), ")" ))
+```
+
+The 9 segment clustering seems to complicated to be interpretable. Therefore, the we go with 8 segments to the next steps of this analysis.
+
+## Segment (cluster) assignments
+
+These segment assignments are obtained by predicting each respondent’s segment based on the __8 Segments Clustering__ results. Below are the predicted segment assignments for the 6-segment solution.
+
+```{r}
+clusters.hex <- h2o.predict(clus.8, df.h2o) 
+clusters.hex <- as.factor(clusters.hex) # cluster 'names' must be factors for modeling
+```
+
+```{r  results = 'hide'}
+clusters.hex$predict # segment assignments for first 6 respondents of 1036
+```  
+
+And, this table shows the segment sizes printed earlier in a slightly different manner.  
+
+```{r  }
+h2o.table(clusters.hex$predict) # table of assignments over all respondents 
+```   
+We change the levels of segments to be more pretty! After that, the a segment column is added to our new data frame along with all the other variables in the airline data set. This new data frame will be used for predictive modeling in the next sections.
+
+```{r, include=F}
+h2o.setLevels(clusters.hex$predict, c("Seg1","Seg2","Seg3","Seg4", "Seg5", "Seg6", "Seg7", "Seg8"))
+#__Bind RID, predicted segments, and fs variables
+df8C.class<- h2o.cbind(df.h2o[,c(1)], clusters.hex$predict, df.h2o[, c(2:37)])
+colnames(df8C.class)[2] <- "ClustSeg" # renaming predicted cluster column
+```
+
+Below are the new segments names and their count numbers, for some reason it only shows segments 1-6 and not 7 & 8.
+
+```{r}
+h2o.table(clusters.hex$predict)[1:8,] # table of assignments over all respondents 
+```
+
+```{r include=FALSE, include=FALSE, results='hide'}
+h2o.exportFile(df8C.class,
+               "E:/Marketing Analytics-- K. Deal/Assignment_4/df8C_labeled.csv",
+               force=TRUE) # save the results
+```  
+
+
+
+# Building models that predict segment membership accurately  
+
+As mentioned above, I'll continue investigating the 8-segment solution and build a predictive model. There are several model forms that could be used. These include random forests, logistic regression, gradient boosting and deep learning.  
+
+I'll first build a prediction model using the random forest method.  
+
+I want to find the best model for predicting segment membership for each segmentation solution that I consider to be a serious candidate as the best segmentation.
+
+This is still part of the __level 1__ analysis, i.e., using the attitudinal data prior to bringing in demographics and other covariates.    
+
+## Splitting the sample for cross validation 
+
+Some form of cross-validation is absolutely necessary. I'll use the relatively straight-forward procedure of splitting the overall sample into testing (70%) and training (validation) data sets. The 70% is not a required number, but often used.   
+
+Below is the training sample formed using the "h2o.splitFrame()" function on which the predictive model will be built. That function uses the result of the 6-segment k-means analysis that produced the df8C.class data frame and randomly splits it into a training sample and a testing sample. The "predict" column in the table below are those segments into which each respondent was assigned by the k-means segmentation algorithm. The "random forest", "logistic regression" and "gradient boosting" models will be used now to develop models for predicting those segment assignments. The best of those models will be used to score the customer database if the predictor variables are in that database.    
+
+```{r "training sample" }
+fs.split<- h2o.splitFrame(df8C.class, ratios=c(0.7) )
+fs.split[[1]] 
+```  
+
+The testing or holdout or validation sample also has a column indicating the assigned segment for each individual.  
+
+```{r "testing sample" }
+fs.split[[2]]
+```   
+
+## The first predictive model using randomForest  
+
+Random forest is a flexible and highly-valued methodology. As the name implies, it splits the data using a tree-splitting methodology. Instead of building just one tree, the model below builds 200 trees. 
+
+```{r  results='hide' }
+df8C.class_rf <- h2o.randomForest(         ## h2o.randomForest function
+  training_frame   = fs.split[[1]],        ## the H2O frame for training
+  validation_frame = fs.split[[2]],        ## the H2O frame for validation (not required)
+  x=3:16,                       ## the training sample predictor columns, by column index
+  y=2,                          ## the target index (what we are predicting)
+  model_id = "Random_Forest",    ## name the model in H2O
+  ##   not required, but helps use Flow
+  ntrees = 200,                  ## use a maximum of 200 trees to create the
+  ##  random forest model. The default is 50.
+  ##  I have increased it because I will let 
+  ##  the early stopping criteria decide when
+  ##  the random forest is sufficiently accurate
+  stopping_rounds = 2,           ## Stop fitting new trees when the 2-tree
+  ##  average is within 0.001 (default) of 
+  ##  the prior two 2-tree averages.
+  ##  Can be thought of as a convergence setting
+  score_each_iteration = T,      ## Predict against training and validation for
+  ##  each tree. Default will skip several.
+  seed = 1000000) ## Set the random seed so that this result can be reproduced. 
+```
+
+The simple "summary()" function can produce a great deal of information about the model. This might be a bit too much to have in one chunk.    
+
+```{r  }
+summary(df8C.class_rf)  
+```
+
+### Confusion matrix for the training sample.  
+
+While this might be interesting, it is best not to place too much credence on the hit-ratio for the training sample since that data was used to build the model.  
+
+```{r echo=TRUE, message=FALSE, error=FALSE, warning=FALSE }
+h2o.confusionMatrix(df8C.class_rf,  fs.split[[1]]   )  
+```  
+
+### Confusion matrix for testing sample, best to use.  
+
+This confusion matrix shows the ability of the model to predict segment membership for data that was not used in the model construction. This is much better information for partially answering the question, "How good is your model?"
+
+```{r echo=TRUE, message=FALSE, error=FALSE, warning=FALSE }
+h2o.confusionMatrix(df8C.class_rf,  fs.split[[2]]   )  
+```
+
+### Creating an object to hold important diagnostic information 
+
+A receptacle for diagnostic statistics is created below so that this information can be compared efficiently at the end of the predictive modeling.  
+
+```{r  }
+modH <- data.frame(Prediction_model=character(),
+                  hit_ratio=numeric(),
+                  MSE=numeric(),
+                  RMSE=numeric(),
+                  logloss=numeric(),
+                  mean_per_class_error=numeric(),
+                  stringsAsFactors=FALSE) 
+```
+
+```{r  }
+modH[1, 1] <- "Random_forest"
+modH[1, 2] <- df8C.class_rf@model$validation_metrics@metrics$hit_ratio_table$hit_ratio[1] #  
+modH[1, 3] <- df8C.class_rf@model$validation_metrics@metrics$MSE   #  
+modH[1, 4] <- df8C.class_rf@model$validation_metrics@metrics$RMSE       #  
+modH[1, 5] <- df8C.class_rf@model$validation_metrics@metrics$ logloss
+modH[1, 6] <- df8C.class_rf@model$validation_metrics@metrics$ mean_per_class_error 
+```
+
+### Plotting variable importance  
+
+h2o allows for extracting variable importance from the predictive model results. That information is graphed below using the 'plotly' package. These should be compared across the three models used.   
+
+```{r  }
+rf_variable_importances <- as.data.frame(df8C.class_rf@model$variable_importances)
+
+library(plotly)
+plot_ly(rf_variable_importances,
+        y=reorder(rf_variable_importances$variable,
+                  rf_variable_importances$percentage),
+        x = rf_variable_importances$percentage,
+        color = rf_variable_importances$variable,
+        type = 'bar', orientation = 'h') %>%
+  layout( title = "Variable Importance for the random forest model",
+          xaxis = list(title = "Percentage Importance"),
+          ylim=c(0,1),
+          margin = list(l = 120)) 
+```
+
+It's important to find the best model for use in the segmentation. This involves using random forest (above) and comparing to other analytics  such as logistic regression, deep learning, gradient boosting model and others.  
+
+Compare the predictive ability of each type of model and pick the best.  
+
+Analyses that follow use different models to develop the best predictive model as alternative to random forest.
+
+## Building a predictive model using logistic regression  
+
+The glm option in h2o, h2o.glm, conducts logistic regression. The following is a simple setup for conducting glm on the 6-segment solution.  
+
+```{r  results="hide"}
+df8C.class_glm <- h2o.glm(
+  family= "multinomial",  
+  training_frame = fs.split[[1]],        ## the H2O frame for training
+  validation_frame = fs.split[[2]],      ## the H2O frame for validation (not required)
+  x=3:16,                        ## the predictor columns, by column index
+  y=2,
+  lambda=0
+) 
+```
+
+Once again, the "summary()" function produces a lot of information. To find out how to reference parts of the output, run "str(df8C.class_glm)" and follow down that tree until you find what you want to extract.  
+
+```{r  }
+summary(df8C.class_glm) 
+```
+
+### Confusion table for the training sample  
+
+The logistic regression model provides extremely good predictions for the training model, but it would be cheating and unbelievable to use this to support the modeling.  
+
+```{r  }
+df8C.class_glm@ model$ training_metrics@ metrics$ cm$ table
+```  
+
+### Confusion table for the testing or holdout or validation sample
+
+The following chronicles the contents of the generated model.  Here, the predictive ability is still unusually good with `r 100*(1-15/339)`% being predicted accurately.  
+
+```{r  }
+df8C.class_glm@ model$ validation_metrics@ metrics$ cm$ table  
+```  
+
+Look at the code and see another command for the confusion matrix.  
+
+```{r  }
+h2o.confusionMatrix(df8C.class_glm, valid = TRUE) # df8C.class
+```  
+
+### Variable importances  
+
+h2o provides an easy way for obtaining the variable importances. 
+```{r  }
+h2o.varimp(df8C.class_glm)
+```  
+
+### Plotting variable importance  
+
+Notice that the variable importances for this logistic regression model is not the same as produced by the random forest model.  
+
+```{r  }  
+# glm_variable_importances <- as.data.frame(df8C.class_glm@model$variable_importances)
+glm_variable_importances <- as.data.frame(h2o.varimp(df8C.class_glm))
+# rf_variable_importances
+#install.packages("plotly", dependencies=TRUE)
+pacman::p_load(plotly)
+plot_ly(glm_variable_importances,
+        #        x = rf_variable_importances$percentage,
+        y=reorder(glm_variable_importances$variable,
+                  glm_variable_importances$percentage),
+        x = glm_variable_importances$percentage,
+        color = glm_variable_importances$variable,
+        type = 'bar', orientation = 'h') %>%
+  layout( title = "Variable Importance for the logistic regression model on 6 segments",
+          xaxis = list(title = "Percentage Importance"),
+          ylim=c(0,1),
+          margin = list(l = 120))
+```  
+  
+```{r  }
+modH[2, 1] <- "GLM_log_regr"
+modH[2, 2] <- df8C.class_glm@model$validation_metrics@metrics$hit_ratio_table$hit_ratio[1] #  
+modH[2, 3] <- df8C.class_glm@model$validation_metrics@metrics$MSE   #  
+modH[2, 4] <- df8C.class_glm@model$validation_metrics@metrics$RMSE       #  
+modH[2, 5] <- df8C.class_glm@model$validation_metrics@metrics$ logloss
+modH[2, 6] <- df8C.class_glm@model$validation_metrics@metrics$ mean_per_class_error 
+```
+
+
+## Gradient boosting machine
+
+The gradient boosting machine model is a type of neural network algorithm that can be very effective. It is quite difficult to foretell which of these models is likely to be the best predictor of segment membership. It is important to try several models and compare the results.  
+
+```{r "GBM", results='hide'}
+#GBM Gradient Boosting Machine
+df8C.class_gbm<- h2o.gbm(
+  distribution="AUTO",
+  training_frame   = fs.split[[1]],        ## the H2O frame for training
+  validation_frame = fs.split[[2]],      ## the H2O frame for validation (not required)
+  x=3:16,                        ## the predictor columns, by column index
+  y=2,
+  model_id = "fs.gbm",
+  stopping_rounds = 3,
+  histogram_type = "UniformAdaptive" ,
+  stopping_tolerance = 1e-2,
+  seed = 1234
+)
+```  
+
+### Coefficients 
+
+GBM models do not produce coefficients of the variables. 
+
+
+### Model Performance  
+
+The "h2o.performance()" function provides a tidy list of many important analytical metrics. The "str(perf)" command will provide locations for the following metrics.  Notice that the performance is requested on the holdout sample.  
+
+```{r } 
+perf <- h2o.performance(df8C.class_gbm, fs.split[[2]])
+perf
+```  
+
+ 
+
+### Confusion table for the training sample  
+
+```{r  }
+# str(df8C.class_glm)
+df8C.class_gbm@ model$ training_metrics@ metrics$ cm$ table
+
+# h2o.confusionMatrix( df8C.class_glm,train = TRUE)
+```  
+
+### Confusion table for the testing sample
+
+The following chronicles the contents of the generated model.  
+
+The confusion matrix can be pulled from the model output file or from the performance output shown above.    
+
+```{r } 
+h2o.confusionMatrix(df8C.class_gbm, fs.split[[2]]) # CONFUSION TABLE FOR HOLDOUT
+#h2o.confusionMatrix(perf) # DIFFERENT WAY
+```   
+  
+
+### Variable importances  
+
+```{r  }
+h2o.varimp(df8C.class_gbm)
+```    
+
+### Plotting variable importance  
+
+The variable importances are similar to those for rf and glm models, but with some differences.  
+
+```{r  }  
+# glm_variable_importances <- as.data.frame(df8C.class_glm@model$variable_importances)
+gbm_variable_importances <- as.data.frame(h2o.varimp(df8C.class_gbm))
+# rf_variable_importances
+#install.packages("plotly", dependencies=TRUE)
+pacman::p_load(plotly)
+plot_ly(gbm_variable_importances,
+        #        x = rf_variable_importances$percentage,
+        y=reorder(gbm_variable_importances$variable,
+                  gbm_variable_importances$percentage),
+        x = gbm_variable_importances$percentage,
+        color = gbm_variable_importances$variable,
+        type = 'bar', orientation = 'h') %>%
+  layout( title = "Variable Importance for GBM model of 6-segment solution",
+          xaxis = list(title = "Percentage Importance"),
+          ylim=c(0,1),
+          margin = list(l = 120))
+```  
+
+### Predicting probabilities of segment membership  
+
+The table below shows the probabilities of each several respondents being in each of the 8 segments and then assigns the person to the segment having the highest probability.  This can be very valuable information and used in different ways.  
+
+```{r results = 'hide'}
+gbm_8_pred <- h2o.predict(df8C.class_gbm, newdata=fs.split[[2]])
+```
+
+```{r}
+head(gbm_8_pred, 10) %>% tab_df( show.rownames = T, title = "Predicted segments for testing sample")
+```  
+
+# Statistics of predictive models for 8-segment solution, Level 1  
+  
+```{r }
+modH[3, 1] <- "Gradient Boosting"
+modH[3, 2] <- df8C.class_gbm@model$validation_metrics@metrics$hit_ratio_table$hit_ratio[1] #  
+modH[3, 3] <- df8C.class_gbm@model$validation_metrics@metrics$MSE   #  
+modH[3, 4] <- df8C.class_gbm@model$validation_metrics@metrics$RMSE       #  
+modH[3, 5] <- df8C.class_gbm@model$validation_metrics@metrics$ logloss
+modH[3, 6] <- df8C.class_gbm@model$validation_metrics@metrics$ mean_per_class_error 
+```
+
+
+
+
+The table below provides the diagnostic statistics produced by the predictive models. 
+
+```{r}
+modH %>% tab_df( show.rownames = TRUE, sort.column = -2, title = "Statistics of predictive models for the 6-segment solution")
+```  
+<br>  
+    
+The GLM (logistic regression) model seems to be better with a higher hit-ratio of `r max(modH[, 2])` compared to hit-ratios for the other models. All other statistics indicate that GLM is the superior model.  
+
+```{r}
+modH_hit <- modH[, 1:2]
+modH_hit_long <- melt(modH_hit)
+# Using Prediction_model as id variables
+ggplot(data=modH_hit_long, aes(x= reorder(Prediction_model, -value), y=value ) ) +
+   geom_bar(  stat="identity" , fill = "lightblue", width = 0.3)+
+   geom_point(aes( color= Prediction_model ), size=6) +
+   theme(axis.text.x = element_text(angle = 45, hjust = 1, size=14)) +
+   labs( title= "Hit ratios for predictive models", y="Proportion correct",
+         x= "Prediction Model")
+```
+
+
+# Basic interpretation of segments based on level 1 attributes
+
+Before moving on to the Level-2 segmentation and using demographic variables, in this section we try to interpret the clusters using the mean of their attitudinal variables.
+
+```{r, fig.width=15, fig.height=10}
+g8 + theme(legend.direction = "vertical",
+           legend.text = element_text(size=15),
+           legend.key.size = unit(.7, "cm"))
+```
+
+* _Segment 2:_ Have the least scoring in all attitude variables, however their sample size is `r round(h2o.cluster_sizes(clus.8)[2] / sum(h2o.cluster_sizes(clus.8)) * 100, 2)` percent of all customers.
+
+* _Segment 5:_ One of the two least scoring segments, although its customers had a better opinion than segment 2 in helpfulness, service and easy_reservation variables.
+
+* _Segment 6:_ Our best customers! They had the highest average in all categories with no particular peak or trough.
+
+* _Segment 1:_ Thinking highly of the service variables but were not satisfied with the flight option variables.  **overhead storage** was a huge turn-off for them.
+
+* _Segment 3:_ Near perfect in almost all categories (like segment 6) but, flight options, ticket prices and preferred seats were a concern for this segment. However, it didn't affect their attitude toward recommending the airline to others, this segment is in the top 3 in the _recommend_ variable.
+
+* _Segment 4:_ Medium satisfied, Overhead storage and ticket prices was a concern for this segment.
+
+* _Segment 7:_ This is one of interesting segments. They were near the top with seat_comfort, courtesy, friendliness, etc. (quality of service variables). However, not as much on the flight options and ticket prices variables. Also, they were not very eager to  recommend the airline to others as they had a around average result in the _recommend_ variable.
+
+* _Segment 8:_ They had the same linear pattern in their variable means as in our highest segment (Segment 6) with about 1 point difference (lower). No particular peaks
+
+
+# Level 2 of the segmentation process  
+
+The objective of __Level 1__ segmentation was 1) to use a partitioning method, or several, to find several segmentation solutions; and 2) to find a model that is best at predicting membership in the segments based on the Level 1 variables, normally attitudinal variables based on the product.  
+
+__Level 2__ of the segmentation process focuses on the very practical problem of attempting to assign people to segments based on variables that may be more accessible than the attitudinal variables, i.e., demographic and geo-demographic variables. Most large customer data bases contain individual demographic information but rarely attitudes, including product perceptions and preferences.  
+
+The process of applying a predictive model to a customer data base is often called scoring or tagging. The development of a very simple predictive model that can be used quickly by sales representatives to estimate segment membership of a prospect is referred to as a typing tool. 
+
+
+## Tuning the demographic variables
+
+The demographic variables in the airline data need to be analysed before put in the model. After using a simple `describe` function. It is found out that they are not factors. In the next code chunk we change turn these variables in to factors. Also, the demographics contain missing points and missing point causes all the next predictive models to produce an error. By omitting the rows containing a missing value, we lose 50 percent of customers! But as the model performance in level 2 is not comparable to the performance in Level 1, we proceed for now.
+
+```{r}
+h2o.describe(df8C.class[,17:24])
+
+df8C.class[,17:24] <- h2o.asfactor(df8C.class[,17:24])
+
+df8C.class.na <- df8C.class %>% h2o.na_omit()
+nrow(df8C.class.na)
+```
+
+After that the reduced (by 50%) data is splitted into a train and validation subset.
+
+```{r}
+#__splitting df into training (70%) and testing (validation) datasets________
+fs.split<- h2o.splitFrame(df8C.class.na, ratios=c(0.7))
+```  
+
+# A random forest model  
+
+This random forest model attempts to predict segment membership from the 8-segment solution developed in Level 1 by using only the demographic variables. The demographic variables were not used in the construction of the predictive model. But, they might be the only variables in the customer database and are easier to obtain than are the values of the attitudinal variables.  This begins the process to answer the question, "How well do the covariates predict segment membership?"  
+
+```{r results='hide'}
+fs3Cov.class_rf <- h2o.randomForest(         
+  training_frame   = fs.split[[1]],        
+  validation_frame = fs.split[[2]],     
+  x=17:24,                        ## the predictor columns, by column index
+    y=2,                          ## the target index (what we are predicting)
+  model_id = "RF_cov",    ## name the model in H2O
+  ##   not required, but helps use Flow
+  ntrees = 200,                  ## use a maximum of 200 trees to create the
+  ##  random forest model. The default is 50.
+  ##  I have increased it because I will let 
+  ##  the early stopping criteria decide when
+  ##  the random forest is sufficiently accurate
+  stopping_rounds = 2,           ## Stop fitting new trees when the 2-tree
+  ##  average is within 0.001 (default) of 
+  ##  the prior two 2-tree averages.
+  ##  Can be thought of as a convergence setting
+  score_each_iteration = T,      ## Predict against training and validation for
+  ##  each tree. Default will skip several.
+  seed = 1000000)                ## Set the random seed so that this can be reproduced.
+```
+
+## Check-out the hit-ratio
+
+The `summary()` function brings forth a great deal of output. Most of this is useful but might be too much to digest in one chunk. Using the `str()` function on the model output will list the smaller pieces of output that can be extracted in more usable pieces. The demographics do not seem to very accurately predict segment membership.  
+
+Both train and  validation metrics indicate that the demographic variables are not very effective in predicting segment membership.  
+
+
+```{r}
+summary(fs3Cov.class_rf)  
+```
+
+## Keys to look for are validation performance and variable importance.
+
+More direct ways to access the training and validation metrics are shown in the code-chunks below. Performance metrics depend on the type of model being built. With a multinomial classification, we will primarily look at the confusion matrix, and overall accuracy via the hit-ratio.  Once again, error rate and the hit-ratio are very poor.  
+
+## Confusion matrix for the training sample  
+
+The predictive ability of the random forest model on the training sample is quite poor. However, this information should not be relied upon.  
+
+
+```{r}
+fs3Cov.class_rf@model$training_metrics     ## 
+```   
+
+## Confusion matrix for the holdout sample  
+
+The error rate and the corresponding hit-ratio for the testing sample are very poor.  
+
+```{r}
+h2o.confusionMatrix(fs3Cov.class_rf,  fs.split[[2]] )
+``` 
+
+Or, the same result can be obtained as follows.
+
+```{r}
+fs3Cov.class_rf@model$validation_metrics     ## 
+```  
+
+## Hit ratio tables for the training and testing samples  
+  
+```{r}
+h2o.hit_ratio_table(fs3Cov.class_rf, train=TRUE, valid=TRUE )
+```
+
+# Importance of the predicting demographic variables  
+
+While education, occupation, age and income seem to be the most important variables, they are not doing a very good job of predicting.  
+
+```{r}
+fs3Cov.class_rf@model$variable_importances
+```
+
+## The diagnostic statistics  
+
+The table below shows the hit-ratio, MSE (mean square error), RMSE (root mean square error), logloss and mean per class error for the random forest model. This table will be expanded to include the diagnostic statistics from each successive predictive model. After all of the analyses, we'll select the model with the best stats, i.e., highest hit ratio and lowest error rates.  
+
+```{r}
+# THE FOLLOWING covH data frame IS TO HOLD STATISTICS FROM EACH MODEL
+covH <- data.frame(Prediction_model=character(),
+                   hit_ratio=numeric(),
+                   MSE=numeric(),
+                   RMSE=numeric(),
+                   logloss=numeric(),
+                   mean_per_class_error=numeric(),
+                   stringsAsFactors=FALSE)
+
+covH[1, 1] <- "Random_forest"
+covH[1, 2] <- fs3Cov.class_rf@model$validation_metrics@metrics$hit_ratio_table$hit_ratio[1] #  
+covH[1, 3] <- fs3Cov.class_rf@model$validation_metrics@metrics$MSE   #  
+covH[1, 4] <- fs3Cov.class_rf@model$validation_metrics@metrics$RMSE       #  
+covH[1, 5] <- fs3Cov.class_rf@model$validation_metrics@metrics$ logloss
+covH[1, 6] <- fs3Cov.class_rf@model$validation_metrics@metrics$ mean_per_class_error
+covH
+```
+
+# Logistic regression  
+
+Logistic regression using the GLM function will be the second predictive model that we'll investigate. 
+
+```{r results = 'hide'}
+fs3Cov.class_glm<- h2o.glm(
+  family= "multinomial",  
+  training_frame = fs.split[[1]],        ## the H2O frame for training
+  validation_frame = fs.split[[2]],      ## the H2O frame for validation (not required)
+  x=17:24,                        ## the predictor columns, by column index
+  y=2,
+  lambda=0
+)
+```
+
+Logistic regression does provide coefficients but they can be difficult to interpret.  
+
+```{r}
+fs3Cov.class_glm@model$coefficients_table
+```
+
+## Confusion matrix for the training sample  
+
+The error rate is quite poor on the training sample for the random forest model.  
+
+```{r}
+fs3Cov.class_glm@model$training_metrics  
+```  
+
+## Confusion matrix for the holdout sample  
+
+The holdout sample error rate is worse than for the training sample, which is what should be expected. Unfortunately, the prediction error rate is very high.  
+
+```{r}
+h2o.confusionMatrix(fs3Cov.class_glm,  fs.split[[2]] )
+```
+
+## Hit ratio table for the training and testing samples  
+
+Of course the hit-ratios, which are just 1 minus the error rates, are quite poor.  
+
+```{r}
+h2o.hit_ratio_table(fs3Cov.class_glm, train=TRUE, valid=TRUE )
+```
+
+## Diagnostic statistics for the GLM model  
+
+The table below shows that the diagnostic statistics for the random forest model and logistic regression model. Neither of those results are not at all impressive.  
+
+```{r}
+covH[2, 1] <- "GLM"
+covH[2, 2] <- fs3Cov.class_glm@model$validation_metrics@metrics$hit_ratio_table$hit_ratio[1] #  
+covH[2, 3] <- fs3Cov.class_glm@model$validation_metrics@metrics$MSE   #  
+covH[2, 4] <- fs3Cov.class_glm@model$validation_metrics@metrics$RMSE       #  
+covH[2, 5] <- fs3Cov.class_glm@model$validation_metrics@metrics$ logloss
+covH[2, 6] <- fs3Cov.class_glm@model$validation_metrics@metrics$ mean_per_class_error
+covH
+```
+
+# Deep Learning  
+
+The basic deep learning model has a very simple structure that can be expanded.  
+
+```{r results = 'hide'}
+fs3Cov.class_dl<- h2o.deeplearning(
+  training_frame = fs.split[[1]],        ## the H2O frame for training
+  validation_frame = fs.split[[2]],      ## the H2O frame for validation (not required)
+  x=17:24,                        ## the predictor columns, by column index
+  y=2
+)
+```
+
+## Confusion matrix for the training sample  
+
+The training sample error rate is a little better than for the earlier models. However, this does not really mean anything.  
+
+```{r}
+fs3Cov.class_dl@model$training_metrics  
+```  
+
+## Confusion matrix for the holdout sample  
+
+Unfortunately, the validation sample error rate is worse than that produced by the random forest and GLM models.  
+
+```{r}
+h2o.confusionMatrix(fs3Cov.class_dl,  fs.split[[2]] )
+```
+
+## Hit ratio table for the training and testing samples  
+
+Again, the hit ratios are very poor.  
+
+```{r}
+h2o.hit_ratio_table(fs3Cov.class_dl, train=TRUE, valid=TRUE )
+```
+
+## Diagnostic statistics  
+
+The diagnostics statistics table indicates that the GLM model is the best performer in a very dismal race.  
+
+```{r}
+covH[3, 1] <- "Deep_Learning"
+covH[3, 2] <- fs3Cov.class_dl@model$validation_metrics@metrics$hit_ratio_table$hit_ratio[1] #  
+covH[3, 3] <- fs3Cov.class_dl@model$validation_metrics@metrics$MSE   #  
+covH[3, 4] <- fs3Cov.class_dl@model$validation_metrics@metrics$RMSE       #  
+covH[3, 5] <- fs3Cov.class_dl@model$validation_metrics@metrics$ logloss
+covH[3, 6] <- fs3Cov.class_dl@model$validation_metrics@metrics$ mean_per_class_error
+covH
+```
+# Gradient Boosting Model  
+
+The basic gradient boosting model, using neural networks, is specified below.  
+  
+```{r results = 'hide'}
+fs3Cov.class_gbm<- h2o.gbm(
+  training_frame = fs.split[[1]],        ## the H2O frame for training
+  validation_frame = fs.split[[2]],      ## the H2O frame for validation (not required)
+  x=17:24,                        ## the predictor columns, by column index
+  y=2
+)
+```
+
+
+## Confusion matrix for the training sample  
+
+The incredibly low error rate shown below for the training sample is quite suspicious compared to the earlier models.  
+
+```{r}
+fs3Cov.class_gbm@model$training_metrics  
+```  
+
+## Confusion matrix for the holdout sample  
+
+However, the holdout sample error rate is about as bad as seen earlier.  
+
+```{r}
+h2o.confusionMatrix(fs3Cov.class_gbm,  fs.split[[2]] )
+```
+
+## Hit ratio table for the training and testing samples  
+  
+```{r}
+h2o.hit_ratio_table(fs3Cov.class_gbm, train=TRUE, valid=TRUE )
+```  
+
+## Diagnostic statistics
+
+The GLM model is maintaining its narrow edge over the other three models.  
+  
+```{r}
+covH[4, 1] <- "GBM_Boosting"
+covH[4, 2] <- fs3Cov.class_gbm@model$validation_metrics@metrics$hit_ratio_table$hit_ratio[1] #  
+covH[4, 3] <- fs3Cov.class_gbm@model$validation_metrics@metrics$MSE   #  
+covH[4, 4] <- fs3Cov.class_gbm@model$validation_metrics@metrics$RMSE       #  
+covH[4, 5] <- fs3Cov.class_gbm@model$validation_metrics@metrics$ logloss
+covH[4, 6] <- fs3Cov.class_gbm@model$validation_metrics@metrics$ mean_per_class_error
+covH
+```
+
+# Naive Bayes Model  
+  
+```{r results = 'hide'}
+fs3Cov.class_nB <- h2o.naiveBayes(
+  training_frame = fs.split[[1]],        ## the H2O frame for training
+  validation_frame = fs.split[[2]],      ## the H2O frame for validation (not required)
+  x=17:24,                        ## the predictor columns, by column index
+  y=2,
+  laplace = 3)
+```
+
+
+## Confusion matrix for the training sample  
+
+The naive Bayes model error rate for the training sample is quite similar to the results of the other four models.  
+
+```{r}
+fs3Cov.class_nB@model$training_metrics  
+```  
+
+## Confusion matrix for the holdout sample  
+
+The holdout error rate is also about the same as is those rates of the other models.  
+  
+```{r}
+h2o.confusionMatrix(fs3Cov.class_nB,  fs.split[[2]] )
+```
+
+## Hit ratio table for the training and testing samples  
+  
+```{r}
+h2o.hit_ratio_table(fs3Cov.class_nB, train=TRUE, valid=TRUE )
+```  
+
+# Comparing the five predictive models' diagnostic statistics  
+
+```{r}
+covH[5, 1] <- "Naive_Bayes"
+covH[5, 2] <- fs3Cov.class_nB@model$validation_metrics@metrics$hit_ratio_table$hit_ratio[1] #  
+covH[5, 3] <- fs3Cov.class_nB@model$validation_metrics@metrics$MSE   #  
+covH[5, 4] <- fs3Cov.class_nB@model$validation_metrics@metrics$RMSE       #  
+covH[5, 5] <- fs3Cov.class_nB@model$validation_metrics@metrics$ logloss
+covH[5, 6] <- fs3Cov.class_nB@model$validation_metrics@metrics$ mean_per_class_error
+```
+
+The naive Bayes model maintained its narrow edge over the other models. However, the hit ratio is nothing to be proud of. The naive Bayes model seems to be superior on several of the error statistics. 
+
+```{r}
+pacman::p_load(sjPlot)
+tab_df(covH, sort.column = -2, show.rownames = FALSE, digits = 3,
+       title = "Statistics of five Level 2 models of the 8-segment solution")
+```  
+  
+# Graphically comparing the hit ratios for the 5 models   
+
+As seen in the following graph, Naive bayes were the top model in predicting the segments. Altough the general resutls is not comparable to the numbers we had in level-1 segmentation!
+  
+```{r}
+pacman::p_load(reshape2)
+# covH[,1:2] 
+hits_long<- melt(covH[,1:2] ) # need to reshape to 'long' form
+# head(hits_long )
+pacman::p_load(ggplot2)
+ggplot(data=hits_long, aes(x= reorder(Prediction_model, -value), y=value ) ) +
+  geom_bar(  stat="identity" , fill = "pink", width = 0.3) +
+  geom_point(aes( color= Prediction_model ), size=3) +
+  theme(axis.text.x = element_text(angle = 25, hjust = 1, size=10)) +
+  labs( title= "Hit ratios for predictive models using covariates" , 
+        y= "Proportion correct", x= "Prediction Model") +
+  ylim(0, 1)
+```
+
+# Obtaining the segment assignments using the naive Bayes model
+
+Predict each respondents' segment based on fs3Cov.class_nB model.   
+
+```{r results = 'hide' }
+cov.assign.hex = h2o.predict(fs3Cov.class_nB, df8C.class[,17:24]) 
+cov.assign.hex<- as.factor(cov.assign.hex) # cluster 'names' must be factors for modeling
+h2o.print(cov.assign.hex$predict, n = 10L)
+h2o.table(cov.assign.hex$predict) # table of assignments over all respondents
+```
+
+# combine L1 segments and L2 segments  
+
+The segments developed from the 8-segment k-means solution and those predicted based on the demographic variables are combined into a single dataframe below and then saved.  
+
+```{r}
+fs6.L1.L2.segs <- h2o.cbind(df8C.class[,c(1,2)],  cov.assign.hex$predict, df8C.class[,3:38])
+colnames(fs6.L1.L2.segs)[ c(2,3)] <- c("L1_Segments", "L2_Segments")
+fs6.L1.L2.segs[1:6, 1:5]
+```  
+
+This table shows the coincidence and divergence of prediction using the two models.  
+
+```{r}
+print( h2o.table(fs6.L1.L2.segs$L1_Segments,  fs6.L1.L2.segs$L2_Segments), n=64L)
+```
+
+# Visualizing & Summarizing customers in segments  
+  
+## Table of attribute attitudes and segments  
+
+The table below lists the mean ratings for each attitudinal variable for those in each of the 8 Level 1 segments. 
+
+Use the information below and the earlier information to determine if this 8-segment solution has good interpretability. If not, go back to one of the other segmentation solutions.  
+
+```{r fig.width = 8, fig.height = 8}
+library("dplyr")
+library("kableExtra")
+library(psych)
+library(data.table)
+
+df_final_L1_L2 <- as.data.frame(fs6.L1.L2.segs)
+
+df_final_L1_L2 %>% 
+  mutate(Group = as.factor(L1_Segments)) %>%
+  group_by(Group) %>%
+  summarize(Avg_v075 = round(mean(Easy_Reservation),2), 
+            Avg_v076 = round(mean(Preferred_Seats),2), 
+            Avg_v077 = round(mean(Flight_Options),2),
+            Avg_v078 = round(mean(Ticket_Prices),2),
+            Avg_v079 = round(mean(Seat_Comfort),2),
+            Avg_v080 = round(mean(Seat_Roominess),2),
+            Avg_v081 = round(mean(Overhead_Storage),2),
+            Avg_v082 = round(mean(Clean_Aircraft),2),
+            Avg_v083 = round(mean(Courtesy),2),
+            Avg_v084 = round(mean(Friendliness),2),
+            Avg_v085 = round(mean(Helpfulness),2),
+            Avg_v086 = round(mean(Service),2),
+            Avg_v087 = round(mean(Satisfaction),2),
+            Avg_v088 = round(mean(Recommend), 2),
+            Count_of_Members = n()
+  ) %>%
+  arrange(Group) %>% 
+  transpose() -> cd
+
+colnames(cd) <-  cd[1,] 
+cd <- cd[-1,]
+cd$order <- 1:nrow(cd)
+rownames(cd)[1:14] <- colnames(df_final_L1_L2[,4:17])
+rownames(cd)[15] <- c("Segment_Size")
+# cd$variable <- rownames(cd)
+cd$variable <- c(names(df_final_L1_L2)[4:17],
+                 "Segment Size")
+cd <- cd[, c(10, 1:9)]
+cd[,2:9] <- lapply(cd[,2:9], function(x) as.numeric(as.character(x)))
+
+cd[1:14, 1:9] %>% 
+  arrange(variable ) %>% 
+  mutate_if(is.numeric, function(x) {
+    cell_spec(x, bold = T, 
+              color = spec_color(x, end = 0.9),
+              font_size = spec_font_size(x))
+  }) %>%
+  kable(escape = F, align = "c") %>%
+  kable_styling(c("striped", "condensed"), full_width = T, position = "left")
+```
+
+## Correspondence analysis of attributes and segments  
+
+There is not much that could be imputed from this plot. Some known infomation could be related to it, for example, the CA shows that Segments 2 and 5 that had the least score in attitudinal variables are close in the plot as well as segments 6 and 8 which had the best scores. Other than that, it shows the closeness of service-related variables (e.g. Helpfulness, Friendliness, Courtesy) but it does not give us much personified information about the segments.
+
+```{r  fig.width=12, fig.height=8}  
+library(FactoMineR)
+cd.m <- cd[1:14, 2:9]
+c <- CA(cd.m, graph=FALSE)
+plot(c, title="Correspondence Analysis of Attributes and Segments", col.main="blue" )
+``` 
+
+# Interpreting the segments using demographic data 
+
+The several tables that follow provide the row and column percents for each level of each demographic for the 8 Level 1 segments. While prediction using the demographic variables has been shown to be very poor, there may be some insights that could help to better describe the segments.  
+
+The Chi-square statistics beneath each table provide some indication of whether the table shows any significant relationship between the variables and the segments.
+
+
+## Segments by Language 
+
+The majority of customers are english speaking. And the second most is Spanish. The two most populated segments in each language are segments 3 and 6, that also were the most populated segments in total. Not much insight here!
+
+```{r}
+library(sjPlot)
+sjt.xtab(df_final_L1_L2$Language, df_final_L1_L2$L1_Segments,
+         show.row.prc = TRUE, show.col.prc = TRUE)
+```
+
+## Segments by Smoking habits 
+
+Aboth 80 percent of customers are non-smokers.
+
+```{r}
+sjt.xtab(df_final_L1_L2$Smoker, df_final_L1_L2$L1_Segments,
+         show.row.prc = TRUE, show.col.prc = TRUE)
+```
+
+## Segments by Employment
+
+One of the more important demographic variable according to the Chi-Square tests. Most segemnts are nearly equally distributed between the three categories of employment type other than , again, segments 2 & 5 which have a small sample size.
+
+```{r}
+sjt.xtab(df_final_L1_L2$Employment, df_final_L1_L2$L1_Segments,
+         show.row.prc = TRUE, show.col.prc = TRUE)
+```
+
+## Segments by Education
+
+```{r}
+sjt.xtab(df_final_L1_L2$Education, df_final_L1_L2$L1_Segments,
+         show.row.prc = TRUE, show.col.prc = TRUE)
+```
+
+## Segments by Marital
+
+```{r}
+sjt.xtab(df_final_L1_L2$Marital, df_final_L1_L2$L1_Segments,
+         show.row.prc = TRUE, show.col.prc = TRUE)
+```
+
+## Segments by Gender
+
+The ratio is almost always 1:1 for men and female but in segment 5 we have a huge difference 1:2 in the ratio. Although the sample size for this segment is quite low (`21`).
+
+```{r}
+sjt.xtab(df_final_L1_L2$Sex, df_final_L1_L2$L1_Segments,
+         show.row.prc = TRUE, show.col.prc = TRUE)
+```
+
+## Segments by Income
+
+Income is normally distributed in almost each segment and the mean is around $60k.
+
+```{r}
+levels(df_final_L1_L2$Income) <- c("Less than $20,000",
+                                   "$20000 to $29999",
+                                   "$30000 to $39999","$40000 to $49999",
+                                   "$50000 to $59999",
+                                   "$60000 to $69999",
+                                   "$70000 to $79999",
+                                   "$80000 to $89999",
+                                   "$90000 to $99999",
+                                   "$100000 to $149999",
+                                   "$150,000 to $174,999",
+                                   "$175,000 to $199,999",
+                                   "$200,000 or more")
+
+sjt.xtab(df_final_L1_L2$Income, df_final_L1_L2$L1_Segments,
+         show.row.prc = TRUE, show.col.prc = TRUE)
+```
+
+## Segments by Age
+
+```{r}
+sjt.xtab(df_final_L1_L2$Age, df_final_L1_L2$L1_Segments,
+         show.row.prc = TRUE, show.col.prc = TRUE)
+```
+
+
+### Age histograms
+
+Here we plot a histogram of customer's age in different segment.
+
+```{r, fig.height=10}
+ggplot(df_final_L1_L2, aes(x = df_final_L1_L2$Age))+
+  geom_bar(aes(y=..count..,fill= df_final_L1_L2$L1_Segments)) +
+  #geom_area(aes(y = ..density.. ,fill = df_final_L1_L2$L1_Segments),adjust = 1, alpha = 0.5)+ 
+  facet_grid(df_final_L1_L2$L1_Segments ~.)
+```
+
+# Personification of Segments
+
+* __Segment 6:__ Have more than $60k income, and are either married or living with a common law partner. No particluar pattern in education.
+
+* __Segment 5:__ Majority were part-time employed, more than any other segment. More female than male. 
+
+# Marketing Strategy based on Segments
+
+The demographic variables were not informing in personification of the segments. We will use the Level-1 attitude variables to define a marketing strategy.
+
+It is important to identify what affected the "satisfaction" and "recommend" variables in each segment. For example in segment 7, the ratings for quality of service was near the top but medium perception on flight option variables and that caused the decline in cutomers's perception of the airline. Meaning, this segment was more sensetive to flight options.
+
+There were other senetivities among other segmetns. Segment 1 and 4 had a low rate on overhead_storage or segment 7 was more concerned about the ticket prices and flight options.
+
+A simple marketing strategy would be to identify our best customers segments, that are segments 3,6 and 8. These were the people who seemed comfortable with the airline and most eager to return back. Also, 3 of the most populated segments. So this is all good news for us.
+
+Other than that, we can try to address the so called 'sensetivities' of other segments, as mentioned before, and promote that in our advertisments for these groups.
